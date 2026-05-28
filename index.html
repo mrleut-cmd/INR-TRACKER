@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="INR Tracker"/>
+  <title>INR Tracker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: #0f172a; font-family: Georgia, serif; color: #e2e8f0; min-height: 100dvh; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { opacity: 1; }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .tab-content { padding: 20px 16px 40px; }
+    @media (min-width: 600px) { .tab-content { padding: 24px 28px 40px; } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+const {
+  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ReferenceLine, ReferenceArea, ResponsiveContainer, Legend
+} = Recharts;
+
+// ── Storage (localStorage) ────────────────────────────────────────
+const KEY_INR      = "inr-tracker-inr-v2";
+const KEY_DOSE     = "inr-tracker-dose-v2";
+const KEY_SETTINGS = "inr-tracker-settings-v2";
+const DEFAULT_MIN  = 2.5;
+const DEFAULT_MAX  = 3.5;
+const DANGER_MARGIN = 0.5;
+
+function lsGet(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+
+// ── Date helpers ──────────────────────────────────────────────────
+function pad(n) { return String(n).padStart(2,"0"); }
+function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function today() { return toDateStr(new Date()); }
+function fmtDate(s) { const [y,m,d]=s.split("-"); return `${d}.${m}.${y.slice(2)}`; }
+function fmtDateLong(s) {
+  return new Date(s+"T12:00:00").toLocaleDateString("de-CH",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"});
+}
+function isoToDisplay(iso) {
+  if (!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+function displayToIso(str) {
+  const parts = str.trim().split(".");
+  if (parts.length !== 3) return null;
+  let [d,m,y] = parts;
+  if (y && y.length===2) y = "20"+y;
+  if (!d||!m||!y||y.length!==4) return null;
+  const dd=parseInt(d,10),mm=parseInt(m,10),yy=parseInt(y,10);
+  if (isNaN(dd)||isNaN(mm)||isNaN(yy)||mm<1||mm>12||dd<1||dd>31) return null;
+  return `${y}-${pad(mm)}-${pad(dd)}`;
+}
+
+// ── INR status ────────────────────────────────────────────────────
+function inrStatus(inr, tMin, tMax) {
+  const dLow=tMin-DANGER_MARGIN, dHigh=tMax+DANGER_MARGIN;
+  if (inr < dLow)  return { label:"Ausserhalb – Zu tief",   color:"#ef4444", zone:"outside" };
+  if (inr < tMin)  return { label:"Gefahrenzone – Zu tief", color:"#f97316", zone:"danger"  };
+  if (inr > dHigh) return { label:"Ausserhalb – Zu hoch",   color:"#ef4444", zone:"outside" };
+  if (inr > tMax)  return { label:"Gefahrenzone – Zu hoch", color:"#f97316", zone:"danger"  };
+  return                   { label:"Im Zielbereich",        color:"#10b981", zone:"target"  };
+}
+
+// ── Chart data builder ────────────────────────────────────────────
+function buildChartData(inrList, doseList) {
+  if (!doseList.length && !inrList.length) return [];
+  const allDates = [...new Set([...inrList.map(e=>e.date),...doseList.map(e=>e.date)])].sort();
+  const doseMap = Object.fromEntries(doseList.map(e=>[e.date,parseFloat(e.dose)]));
+  const inrMap  = Object.fromEntries(inrList.map(e=>[e.date,parseFloat(e.inr)]));
+  const data = [];
+  let cur = new Date(allDates[0]+"T12:00:00");
+  const end = new Date(allDates[allDates.length-1]+"T12:00:00");
+  while (cur <= end) {
+    const ds = toDateStr(cur);
+    data.push({ datum:fmtDate(ds), "Dosis (mg)":doseMap[ds]??null, "INR":inrMap[ds]??null });
+    cur.setDate(cur.getDate()+1);
+  }
+  return data;
+}
+
+// ── Custom ₿ dot ──────────────────────────────────────────────────
+function INRDot(props) {
+  const { cx, cy, value } = props;
+  if (value==null||cx==null) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={9} fill="#ea580c" stroke="#fdba74" strokeWidth={1.5}/>
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
+        fontSize={8} fill="#fff" fontWeight="bold" fontFamily="Arial,sans-serif">₿</text>
+    </g>
+  );
+}
+function INRActiveDot(props) {
+  const { cx, cy } = props;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={12} fill="#ea580c" stroke="#fff" strokeWidth={2.5}/>
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
+        fontSize={10} fill="#fff" fontWeight="bold" fontFamily="Arial,sans-serif">₿</text>
+    </g>
+  );
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────
+function CustomTooltip({ active, payload, label }) {
+  if (!active||!payload?.length) return null;
+  const items = payload.filter(p=>p.value!=null);
+  if (!items.length) return null;
+  return (
+    <div style={{background:"#0f1f3d",border:"1px solid #1e40af80",borderRadius:10,
+      padding:"10px 14px",fontSize:13,color:"#e2e8f0",boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}>
+      <p style={{margin:"0 0 6px",color:"#7dd3fc",fontWeight:700}}>{label}</p>
+      {items.map((p,i)=>(
+        <p key={i} style={{color:p.color,margin:"2px 0"}}>
+          {p.name}: <strong>{p.value.toFixed(1)}</strong>{p.name==="INR"?" INR":" mg"}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+// ── Shared styles ─────────────────────────────────────────────────
+const inp = {
+  width:"100%", background:"#1e293b", border:"1px solid #334155",
+  borderRadius:10, padding:"11px 14px", color:"#e2e8f0",
+  fontSize:16, fontFamily:"Georgia,serif", outline:"none",
+  WebkitAppearance:"none"
+};
+const btn = (active) => ({
+  background: active ? "linear-gradient(135deg,#1d4ed8,#1e40af)" : "transparent",
+  color: active ? "#f0f9ff" : "#64748b",
+  border: active ? "1px solid #3b82f640" : "1px solid transparent",
+  borderRadius: "10px 10px 0 0", padding:"10px 18px", cursor:"pointer",
+  fontSize:14, fontFamily:"Georgia,serif", fontWeight: active?600:400, transition:"all 0.2s"
+});
+
+// ── Small components ──────────────────────────────────────────────
+function Badge({color, children}) {
+  return <span style={{background:color+"25",color,fontSize:11,padding:"3px 10px",borderRadius:20,fontWeight:600,whiteSpace:"nowrap"}}>{children}</span>;
+}
+function SavedBanner() {
+  return <div style={{marginTop:14,background:"#10b98120",border:"1px solid #10b98150",borderRadius:10,
+    padding:"10px",color:"#10b981",fontSize:13,textAlign:"center"}}>✓ Gespeichert</div>;
+}
+function EmptyCard({text}) {
+  return <div style={{textAlign:"center",padding:"36px 16px",color:"#475569",
+    border:"1px dashed #1e40af40",borderRadius:12,fontSize:13}}>{text}</div>;
+}
+
+// ── Main App ──────────────────────────────────────────────────────
+function App() {
+  const [inrList,  setInrList]  = useState(()=>lsGet(KEY_INR)||[]);
+  const [doseList, setDoseList] = useState(()=>lsGet(KEY_DOSE)||[]);
+
+  const initSettings = lsGet(KEY_SETTINGS)||{};
+  const [targetMin, setTargetMin] = useState(initSettings.targetMin??DEFAULT_MIN);
+  const [targetMax, setTargetMax] = useState(initSettings.targetMax??DEFAULT_MAX);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tMinInput, setTMinInput] = useState(String(initSettings.targetMin??DEFAULT_MIN));
+  const [tMaxInput, setTMaxInput] = useState(String(initSettings.targetMax??DEFAULT_MAX));
+
+  const [inrForm,  setInrForm]  = useState({date:today(),inr:"",dateText:isoToDisplay(today())});
+  const [inrEdit,  setInrEdit]  = useState(null);
+  const [inrSaved, setInrSaved] = useState(false);
+
+  const [doseForm,  setDoseForm]  = useState({date:today(),dose:"",dateText:isoToDisplay(today())});
+  const [doseEdit,  setDoseEdit]  = useState(null);
+  const [doseSaved, setDoseSaved] = useState(false);
+
+  const [tab,       setTab]       = useState("dashboard");
+  const [entryMode, setEntryMode] = useState("dose");
+
+  // Persist on change
+  useEffect(()=>lsSet(KEY_INR,  inrList),  [inrList]);
+  useEffect(()=>lsSet(KEY_DOSE, doseList), [doseList]);
+
+  function flash(setter) { setter(true); setTimeout(()=>setter(false),2000); }
+
+  function saveSettings() {
+    const mn=parseFloat(tMinInput), mx=parseFloat(tMaxInput);
+    if (isNaN(mn)||isNaN(mx)||mn>=mx) return;
+    setTargetMin(mn); setTargetMax(mx);
+    lsSet(KEY_SETTINGS,{targetMin:mn,targetMax:mx});
+    setSettingsOpen(false);
+  }
+
+  function saveInr() {
+    if (!inrForm.date||!inrForm.inr) return;
+    const entry={date:inrForm.date,inr:inrForm.inr,id:inrEdit??Date.now()};
+    setInrList(p=>inrEdit?p.map(e=>e.id===inrEdit?entry:e):[...p,entry]);
+    setInrEdit(null);
+    setInrForm({date:today(),inr:"",dateText:isoToDisplay(today())});
+    flash(setInrSaved);
+  }
+
+  function saveDose() {
+    if (!doseForm.date||!doseForm.dose) return;
+    const entry={date:doseForm.date,dose:doseForm.dose,id:doseEdit??Date.now()};
+    setDoseList(p=>doseEdit?p.map(e=>e.id===doseEdit?entry:e):[...p,entry]);
+    setDoseEdit(null);
+    setDoseForm({date:today(),dose:"",dateText:isoToDisplay(today())});
+    flash(setDoseSaved);
+  }
+
+  // Derived
+  const sortedInr  = [...inrList].sort((a,b)=>a.date.localeCompare(b.date));
+  const sortedDose = [...doseList].sort((a,b)=>a.date.localeCompare(b.date));
+  const chartData  = buildChartData(sortedInr, sortedDose);
+  const lastInr    = sortedInr[sortedInr.length-1];
+  const lastDose   = sortedDose[sortedDose.length-1];
+  const status     = lastInr ? inrStatus(parseFloat(lastInr.inr),targetMin,targetMax) : null;
+  const avgINR     = sortedInr.length ? (sortedInr.reduce((s,e)=>s+parseFloat(e.inr),0)/sortedInr.length).toFixed(2) : "–";
+  const avgDose    = sortedDose.length ? (sortedDose.reduce((s,e)=>s+parseFloat(e.dose),0)/sortedDose.length).toFixed(2) : "–";
+  const inTarget   = sortedInr.filter(e=>{const v=parseFloat(e.inr);return v>=targetMin&&v<=targetMax;}).length;
+  const pctTarget  = sortedInr.length ? Math.round(inTarget/sortedInr.length*100) : 0;
+  const hasData    = sortedInr.length>0||sortedDose.length>0;
+
+  // Date input handler
+  function DateInput({value, onChange, onBlur}) {
+    return (
+      <input type="text" value={value} placeholder="TT.MM.JJJJ"
+        inputMode="numeric"
+        style={{...inp, borderColor: displayToIso(value)??"#334155"===null&&value.length>0?"#ef4444":"#334155"}}
+        onChange={e=>onChange(e.target.value)}
+        onBlur={onBlur}/>
+    );
+  }
+
+  return (
+    <div style={{minHeight:"100dvh",background:"linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)"}}>
+
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(90deg,#1e3a5f,#0f2744)",borderBottom:"1px solid #1e40af40",
+        padding:"16px 16px 16px",paddingTop:"max(16px, env(safe-area-inset-top))",
+        display:"flex",alignItems:"center",justifyContent:"space-between",
+        boxShadow:"0 4px 24px rgba(0,0,0,0.3)"}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>🩺</div>
+            <div>
+              <div style={{fontSize:20,fontWeight:700,color:"#f0f9ff",lineHeight:1.2}}>INR Tracker</div>
+              <div style={{fontSize:11,color:"#7dd3fc",letterSpacing:"0.04em"}}>Marcoumar-Therapie</div>
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <button onClick={()=>{setSettingsOpen(v=>!v);setTMinInput(String(targetMin));setTMaxInput(String(targetMax));}}
+            style={{background:"#1e293b80",border:"1px solid #334155",borderRadius:9,padding:"7px 12px",
+              color:"#94a3b8",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>⚙️</button>
+          {lastInr && status && (
+            <div style={{border:`1px solid ${status.color}50`,borderRadius:10,padding:"6px 12px",
+              textAlign:"right",background:status.color+"15",minWidth:70}}>
+              <div style={{fontSize:10,color:"#94a3b8"}}>Letzter INR</div>
+              <div style={{fontSize:22,fontWeight:700,color:status.color,lineHeight:1}}>{parseFloat(lastInr.inr).toFixed(1)}</div>
+              <div style={{fontSize:10,color:status.color}}>{status.zone==="target"?"✓ OK":status.zone==="danger"?"⚠️":"⛔"}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SETTINGS PANEL */}
+      {settingsOpen && (
+        <div style={{background:"#0d1a30",borderBottom:"1px solid #1e40af50",padding:"14px 16px"}}>
+          <div style={{fontSize:12,color:"#7dd3fc",fontWeight:600,marginBottom:12,letterSpacing:"0.05em"}}>
+            ⚙️ INR-ZIELBEREICH ANPASSEN
+          </div>
+          <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:"#64748b"}}>Min</span>
+              <input type="number" step="0.1" value={tMinInput} onChange={e=>setTMinInput(e.target.value)}
+                style={{...inp,width:70,padding:"7px 10px",fontSize:14}}/>
+              <span style={{fontSize:12,color:"#64748b"}}>Max</span>
+              <input type="number" step="0.1" value={tMaxInput} onChange={e=>setTMaxInput(e.target.value)}
+                style={{...inp,width:70,padding:"7px 10px",fontSize:14}}/>
+            </div>
+            <button onClick={saveSettings} style={{background:"linear-gradient(135deg,#1d4ed8,#1e40af)",
+              border:"none",borderRadius:9,padding:"8px 16px",color:"#f0f9ff",fontSize:13,fontFamily:"inherit",
+              fontWeight:600,cursor:"pointer"}}>Speichern</button>
+            <button onClick={()=>setSettingsOpen(false)} style={{background:"transparent",border:"none",
+              color:"#475569",fontSize:20,cursor:"pointer",padding:"4px 8px"}}>✕</button>
+          </div>
+          <div style={{fontSize:11,display:"flex",gap:12,flexWrap:"wrap"}}>
+            <span style={{color:"#10b981"}}>● Ziel: {targetMin}–{targetMax}</span>
+            <span style={{color:"#f97316"}}>● Gefahr: {targetMin-DANGER_MARGIN}–{targetMin} / {targetMax}–{targetMax+DANGER_MARGIN}</span>
+            <span style={{color:"#ef4444"}}>● Aussen: &lt;{targetMin-DANGER_MARGIN} / &gt;{targetMax+DANGER_MARGIN}</span>
+          </div>
+        </div>
+      )}
+
+      {/* TABS */}
+      <div style={{display:"flex",gap:2,padding:"12px 16px 0",borderBottom:"1px solid #1e40af30",background:"#0f172a"}}>
+        {[["dashboard","📊 Dashboard"],["eingabe","✏️ Eintrag"],["verlauf","📋 Verlauf"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={btn(tab===id)}>{label}</button>
+        ))}
+      </div>
+
+      {/* ══ DASHBOARD ══ */}
+      {tab==="dashboard" && (
+        <div className="tab-content">
+          {/* KPI row */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            {[
+              {label:"INR-Messungen",  value:sortedInr.length,  unit:"",   color:"#3b82f6", icon:"🩸"},
+              {label:"Ø INR-Wert",     value:avgINR,            unit:"",   color:"#8b5cf6", icon:"📈"},
+              {label:"Ø Tagesdosis",   value:avgDose,           unit:"mg", color:"#06b6d4", icon:"💊"},
+              {label:"Im Zielbereich", value:pctTarget,         unit:"%",  color:"#10b981", icon:"🎯"},
+            ].map((k,i)=>(
+              <div key={i} style={{background:`linear-gradient(135deg,${k.color}15,${k.color}05)`,
+                border:`1px solid ${k.color}30`,borderRadius:12,padding:"14px",position:"relative",overflow:"hidden"}}>
+                <div style={{fontSize:18,marginBottom:4}}>{k.icon}</div>
+                <div style={{fontSize:10,color:"#64748b",marginBottom:2,letterSpacing:"0.07em",textTransform:"uppercase"}}>{k.label}</div>
+                <div style={{fontSize:24,fontWeight:700,color:k.color,lineHeight:1}}>
+                  {k.value}<span style={{fontSize:11,marginLeft:2,color:k.color+"aa"}}>{k.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {!hasData ? (
+            <div style={{textAlign:"center",padding:"48px 16px",color:"#475569",border:"2px dashed #1e40af40",borderRadius:14}}>
+              <div style={{fontSize:40,marginBottom:12}}>📈</div>
+              <p style={{fontSize:14}}>Noch keine Einträge.</p>
+              <p style={{fontSize:12,marginTop:6,color:"#334155"}}>Tippe auf «Eintrag» um zu beginnen.</p>
+            </div>
+          ) : (
+            <>
+              <div style={{background:"#0f1f3d",border:"1px solid #1e40af30",borderRadius:14,padding:"16px",marginBottom:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:14}}>
+                  <span style={{fontSize:13,color:"#7dd3fc",fontWeight:600,letterSpacing:"0.04em"}}>INR & DOSIS</span>
+                  <span style={{fontSize:10,color:"#475569"}}>Ziel {targetMin}–{targetMax}</span>
+                </div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <ComposedChart data={chartData} margin={{top:14,right:4,left:-18,bottom:0}}>
+                    <defs>
+                      <linearGradient id="dG" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#06b6d4" stopOpacity={0.35}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <ReferenceArea yAxisId="inr" y1={0}              y2={targetMin-DANGER_MARGIN} fill="#ef4444" fillOpacity={0.07}/>
+                    <ReferenceArea yAxisId="inr" y1={targetMin-DANGER_MARGIN} y2={targetMin}      fill="#f97316" fillOpacity={0.12}/>
+                    <ReferenceArea yAxisId="inr" y1={targetMin}      y2={targetMax}               fill="#10b981" fillOpacity={0.08}/>
+                    <ReferenceArea yAxisId="inr" y1={targetMax}      y2={targetMax+DANGER_MARGIN} fill="#f97316" fillOpacity={0.12}/>
+                    <ReferenceArea yAxisId="inr" y1={targetMax+DANGER_MARGIN} y2={6}              fill="#ef4444" fillOpacity={0.07}/>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b"/>
+                    <XAxis dataKey="datum" tick={{fill:"#475569",fontSize:9}} interval="preserveStartEnd"/>
+                    <YAxis yAxisId="dose" orientation="right" tick={{fill:"#475569",fontSize:9}}/>
+                    <YAxis yAxisId="inr"  orientation="left"  domain={[0,6]}  tick={{fill:"#475569",fontSize:9}}/>
+                    <Tooltip content={<CustomTooltip/>}/>
+                    <ReferenceLine yAxisId="inr" y={targetMin-DANGER_MARGIN} stroke="#ef4444" strokeDasharray="3 3" strokeOpacity={0.5}/>
+                    <ReferenceLine yAxisId="inr" y={targetMin}               stroke="#f97316" strokeDasharray="5 4" strokeOpacity={0.8}/>
+                    <ReferenceLine yAxisId="inr" y={targetMax}               stroke="#f97316" strokeDasharray="5 4" strokeOpacity={0.8}/>
+                    <ReferenceLine yAxisId="inr" y={targetMax+DANGER_MARGIN} stroke="#ef4444" strokeDasharray="3 3" strokeOpacity={0.5}/>
+                    <Area yAxisId="dose" type="monotone" dataKey="Dosis (mg)"
+                      stroke="#06b6d4" strokeWidth={1.5} fill="url(#dG)" connectNulls dot={false} activeDot={{r:4}}/>
+                    <Line yAxisId="inr" type="monotone" dataKey="INR"
+                      stroke="#ea580c" strokeWidth={1.5} strokeOpacity={0.6} connectNulls
+                      dot={<INRDot/>} activeDot={<INRActiveDot/>}/>
+                    <Legend wrapperStyle={{fontSize:11,color:"#64748b",paddingTop:8}}/>
+                  </ComposedChart>
+                </ResponsiveContainer>
+                {/* Zone legend */}
+                <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
+                  {[["#10b981","Zielbereich"],["#f97316","Gefahrenzone"],["#ef4444","Ausserhalb"]].map(([c,l])=>(
+                    <span key={l} style={{fontSize:10,color:c,display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{width:10,height:10,borderRadius:2,background:c,opacity:0.6,display:"inline-block"}}/>
+                      {l}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {lastDose && (
+                <div style={{background:"#06b6d415",border:"1px solid #06b6d430",borderRadius:12,
+                  padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{fontSize:26}}>💊</div>
+                  <div>
+                    <div style={{fontSize:10,color:"#64748b",letterSpacing:"0.06em"}}>LETZTE DOSIS</div>
+                    <div style={{fontSize:20,fontWeight:700,color:"#06b6d4"}}>
+                      {parseFloat(lastDose.dose).toFixed(1)} mg
+                      <span style={{fontSize:11,color:"#475569",fontWeight:400,marginLeft:8}}>
+                        {fmtDateLong(lastDose.date)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ══ EINGABE ══ */}
+      {tab==="eingabe" && (
+        <div className="tab-content">
+          {/* Toggle */}
+          <div style={{display:"flex",background:"#0f1f3d",border:"1px solid #1e40af30",
+            borderRadius:12,padding:4,marginBottom:20,gap:4}}>
+            {[["dose","💊 Tägliche Dosis"],["inr","🩸 INR-Messung"]].map(([id,label])=>(
+              <button key={id} onClick={()=>{setEntryMode(id);setInrEdit(null);setDoseEdit(null);}} style={{
+                flex:1,background:entryMode===id?"linear-gradient(135deg,#1d4ed8,#1e40af)":"transparent",
+                color:entryMode===id?"#f0f9ff":"#64748b",border:"none",borderRadius:9,padding:"11px 8px",
+                cursor:"pointer",fontSize:13,fontFamily:"inherit",fontWeight:entryMode===id?600:400}}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{background:"#0f1f3d",border:"1px solid #1e40af30",borderRadius:14,padding:"20px"}}>
+
+            {/* DOSE FORM */}
+            {entryMode==="dose" && (
+              <div>
+                <h2 style={{margin:"0 0 18px",fontSize:16,color:"#7dd3fc"}}>
+                  {doseEdit?"✏️ Dosis bearbeiten":"💊 Marcoumar-Dosis eintragen"}
+                </h2>
+                <label style={{display:"block",marginBottom:14}}>
+                  <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>Datum</div>
+                  <input type="text" value={doseForm.dateText} placeholder="TT.MM.JJJJ"
+                    inputMode="numeric"
+                    style={{...inp, borderColor:displayToIso(doseForm.dateText)?"#334155":doseForm.dateText.length>0?"#ef4444":"#334155"}}
+                    onChange={e=>{
+                      const txt=e.target.value;
+                      const iso=displayToIso(txt);
+                      setDoseForm(f=>({...f,dateText:txt,date:iso??f.date}));
+                    }}
+                    onBlur={()=>setDoseForm(f=>({...f,dateText:isoToDisplay(f.date)}))}/>
+                </label>
+                <label style={{display:"block",marginBottom:22}}>
+                  <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>Tagesdosis (mg)</div>
+                  <input type="number" step="0.5" min="0" placeholder="z.B. 3.0"
+                    value={doseForm.dose} style={inp} inputMode="decimal"
+                    onChange={e=>setDoseForm(f=>({...f,dose:e.target.value}))}/>
+                </label>
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={saveDose} disabled={!doseForm.date||!doseForm.dose} style={{
+                    flex:1,background:"linear-gradient(135deg,#1d4ed8,#1e40af)",border:"none",borderRadius:10,
+                    padding:"13px",color:"#f0f9ff",fontSize:15,fontFamily:"inherit",fontWeight:600,cursor:"pointer",
+                    opacity:(!doseForm.date||!doseForm.dose)?0.45:1}}>
+                    {doseEdit?"Speichern":"Dosis speichern"}
+                  </button>
+                  {doseEdit && (
+                    <button onClick={()=>{setDoseEdit(null);setDoseForm({date:today(),dose:"",dateText:isoToDisplay(today())});}}
+                      style={{background:"#1e293b",border:"1px solid #334155",borderRadius:10,
+                        padding:"13px 16px",color:"#94a3b8",fontSize:14,fontFamily:"inherit",cursor:"pointer"}}>
+                      Abbrechen
+                    </button>
+                  )}
+                </div>
+                {doseSaved && <SavedBanner/>}
+              </div>
+            )}
+
+            {/* INR FORM */}
+            {entryMode==="inr" && (
+              <div>
+                <h2 style={{margin:"0 0 18px",fontSize:16,color:"#7dd3fc"}}>
+                  {inrEdit?"✏️ INR-Wert bearbeiten":"🩸 INR-Messung eintragen"}
+                </h2>
+                <label style={{display:"block",marginBottom:14}}>
+                  <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>Datum der Messung</div>
+                  <input type="text" value={inrForm.dateText} placeholder="TT.MM.JJJJ"
+                    inputMode="numeric"
+                    style={{...inp, borderColor:displayToIso(inrForm.dateText)??"#334155"===null&&inrForm.dateText.length>0?"#ef4444":"#334155"}}
+                    onChange={e=>{
+                      const txt=e.target.value;
+                      const iso=displayToIso(txt);
+                      setInrForm(f=>({...f,dateText:txt,date:iso??f.date}));
+                    }}
+                    onBlur={()=>setInrForm(f=>({...f,dateText:isoToDisplay(f.date)}))}/>
+                </label>
+                <label style={{display:"block",marginBottom:22}}>
+                  <div style={{fontSize:11,color:"#64748b",letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:6}}>
+                    INR-Wert <span style={{color:"#475569",fontWeight:400,textTransform:"none"}}>(Ziel {targetMin}–{targetMax})</span>
+                  </div>
+                  <input type="number" step="0.1" min="0.5" max="10" placeholder="z.B. 2.5"
+                    value={inrForm.inr} style={inp} inputMode="decimal"
+                    onChange={e=>setInrForm(f=>({...f,inr:e.target.value}))}/>
+                  {inrForm.inr && (()=>{
+                    const s=inrStatus(parseFloat(inrForm.inr),targetMin,targetMax);
+                    return <div style={{marginTop:6,fontSize:12,color:s.color}}>
+                      {s.zone==="target"?"✓":s.zone==="danger"?"⚠️":"⛔"} {s.label}
+                    </div>;
+                  })()}
+                </label>
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={saveInr} disabled={!inrForm.date||!inrForm.inr} style={{
+                    flex:1,background:"linear-gradient(135deg,#1d4ed8,#1e40af)",border:"none",borderRadius:10,
+                    padding:"13px",color:"#f0f9ff",fontSize:15,fontFamily:"inherit",fontWeight:600,cursor:"pointer",
+                    opacity:(!inrForm.date||!inrForm.inr)?0.45:1}}>
+                    {inrEdit?"Speichern":"INR speichern"}
+                  </button>
+                  {inrEdit && (
+                    <button onClick={()=>{setInrEdit(null);setInrForm({date:today(),inr:"",dateText:isoToDisplay(today())});}}
+                      style={{background:"#1e293b",border:"1px solid #334155",borderRadius:10,
+                        padding:"13px 16px",color:"#94a3b8",fontSize:14,fontFamily:"inherit",cursor:"pointer"}}>
+                      Abbrechen
+                    </button>
+                  )}
+                </div>
+                {inrSaved && <SavedBanner/>}
+              </div>
+            )}
+
+            <div style={{marginTop:18,padding:"11px",background:"#1e293b60",borderRadius:10,fontSize:11,color:"#475569"}}>
+              <strong style={{color:"#64748b"}}>Hinweis:</strong> Ersetzt keine ärztliche Beratung. Dosisänderungen stets mit dem Arzt besprechen.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ VERLAUF ══ */}
+      {tab==="verlauf" && (
+        <div className="tab-content">
+          {/* INR table */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:13,color:"#7dd3fc",fontWeight:600,letterSpacing:"0.05em",marginBottom:10}}>🩸 INR-MESSUNGEN</div>
+            {!sortedInr.length ? <EmptyCard text="Noch keine INR-Messungen"/> : (
+              <div style={{background:"#0f1f3d",border:"1px solid #1e40af30",borderRadius:12,overflow:"hidden"}}>
+                {[...sortedInr].reverse().map((r,i)=>{
+                  const s=inrStatus(parseFloat(r.inr),targetMin,targetMax);
+                  return (
+                    <div key={r.id} style={{display:"flex",alignItems:"center",padding:"11px 14px",
+                      background:i%2===0?"transparent":"#ffffff04",borderBottom:"1px solid #1e293b",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:"#94a3b8"}}>{fmtDateLong(r.date)}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
+                          <span style={{fontSize:22,fontWeight:700,color:s.color}}>{parseFloat(r.inr).toFixed(1)}</span>
+                          <Badge color={s.color}>{s.label}</Badge>
+                        </div>
+                      </div>
+                      <button onClick={()=>{setInrEdit(r.id);setInrForm({date:r.date,inr:r.inr,dateText:isoToDisplay(r.date)});setTab("eingabe");setEntryMode("inr");}}
+                        style={{background:"transparent",border:"1px solid #334155",borderRadius:7,
+                          padding:"5px 10px",color:"#64748b",fontSize:14,cursor:"pointer"}}>✏️</button>
+                      <button onClick={()=>setInrList(p=>p.filter(e=>e.id!==r.id))}
+                        style={{background:"transparent",border:"1px solid #ef444430",borderRadius:7,
+                          padding:"5px 10px",color:"#ef4444",fontSize:14,cursor:"pointer"}}>🗑</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Dose table */}
+          <div>
+            <div style={{fontSize:13,color:"#06b6d4",fontWeight:600,letterSpacing:"0.05em",marginBottom:10}}>💊 TAGESDOSEN</div>
+            {!sortedDose.length ? <EmptyCard text="Noch keine Dosiseinträge"/> : (
+              <div style={{background:"#0f1f3d",border:"1px solid #1e40af30",borderRadius:12,overflow:"hidden"}}>
+                {[...sortedDose].reverse().map((r,i)=>(
+                  <div key={r.id} style={{display:"flex",alignItems:"center",padding:"11px 14px",
+                    background:i%2===0?"transparent":"#ffffff04",borderBottom:"1px solid #1e293b",gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,color:"#94a3b8"}}>{fmtDateLong(r.date)}</div>
+                      <div style={{fontSize:20,fontWeight:700,color:"#06b6d4",marginTop:2}}>
+                        {parseFloat(r.dose).toFixed(1)} mg
+                      </div>
+                    </div>
+                    <button onClick={()=>{setDoseEdit(r.id);setDoseForm({date:r.date,dose:r.dose,dateText:isoToDisplay(r.date)});setTab("eingabe");setEntryMode("dose");}}
+                      style={{background:"transparent",border:"1px solid #334155",borderRadius:7,
+                        padding:"5px 10px",color:"#64748b",fontSize:14,cursor:"pointer"}}>✏️</button>
+                    <button onClick={()=>setDoseList(p=>p.filter(e=>e.id!==r.id))}
+                      style={{background:"transparent",border:"1px solid #ef444430",borderRadius:7,
+                        padding:"5px 10px",color:"#ef4444",fontSize:14,cursor:"pointer"}}>🗑</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
