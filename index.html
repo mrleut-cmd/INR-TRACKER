@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="INR Tracker"/>
+<title>INR Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#0f172a;font-family:Georgia,serif;color:#e2e8f0;min-height:100dvh;font-size:15px}
+button{cursor:pointer;font-family:Georgia,serif}
+input{font-family:Georgia,serif}
+input[type=number]::-webkit-inner-spin-button{opacity:1}
+.hidden{display:none!important}
+#app{min-height:100dvh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)}
+
+/* Header */
+#header{background:linear-gradient(90deg,#1e3a5f,#0f2744);border-bottom:1px solid rgba(30,64,175,.25);
+  padding:16px;padding-top:max(16px,env(safe-area-inset-top));
+  display:flex;align-items:center;justify-content:space-between;
+  box-shadow:0 4px 24px rgba(0,0,0,.3)}
+.logo-circle{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+  display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+#last-inr-box{border-radius:10px;padding:6px 12px;text-align:right;min-width:70px;display:none}
+
+/* Settings */
+#settings-panel{background:#0d1a30;border-bottom:1px solid rgba(30,64,175,.3);padding:14px 16px;display:none}
+.settings-zones{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+
+/* Tabs */
+#tabs{display:flex;gap:2px;padding:12px 16px 0;border-bottom:1px solid rgba(30,64,175,.2);background:#0f172a}
+.tab-btn{background:transparent;color:#64748b;border:1px solid transparent;
+  border-radius:10px 10px 0 0;padding:10px 16px;font-size:13px;font-weight:400;transition:all .2s}
+.tab-btn.active{background:linear-gradient(135deg,#1d4ed8,#1e40af);color:#f0f9ff;
+  border-color:rgba(59,130,246,.25);font-weight:600}
+
+/* Content */
+.tab-content{padding:18px 16px 60px;display:none}
+.tab-content.active{display:block}
+
+/* KPI grid */
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.kpi-card{border-radius:12px;padding:14px;position:relative;overflow:hidden}
+.kpi-icon{font-size:18px;margin-bottom:4px}
+.kpi-label{font-size:10px;color:#64748b;letter-spacing:.07em;text-transform:uppercase;margin-bottom:2px}
+.kpi-value{font-size:24px;font-weight:700;line-height:1}
+
+/* Chart */
+.chart-box{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:14px;padding:16px;margin-bottom:14px}
+.chart-title{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+canvas{display:block;width:100%}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b}
+.legend-dot{width:10px;height:10px;border-radius:2px}
+
+/* Empty */
+.empty-card{text-align:center;padding:36px 16px;color:#475569;border:1px dashed rgba(30,64,175,.25);border-radius:12px;font-size:13px}
+
+/* Form */
+.form-card{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:14px;padding:20px}
+.mode-toggle{display:flex;background:#0f1f3d;border:1px solid rgba(30,64,175,.2);
+  border-radius:12px;padding:4px;margin-bottom:20px;gap:4px}
+.mode-btn{flex:1;background:transparent;color:#64748b;border:none;border-radius:9px;
+  padding:11px 8px;font-size:13px;font-family:Georgia,serif;transition:all .2s}
+.mode-btn.active{background:linear-gradient(135deg,#1d4ed8,#1e40af);color:#f0f9ff;font-weight:600}
+.field{display:block;margin-bottom:16px}
+.field-label{font-size:11px;color:#64748b;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:6px}
+.inp{width:100%;background:#1e293b;border:1px solid #334155;border-radius:10px;
+  padding:11px 14px;color:#e2e8f0;font-size:16px;font-family:Georgia,serif;outline:none;
+  -webkit-appearance:none;appearance:none}
+.inp:focus{border-color:#3b82f6}
+.inp.invalid{border-color:#ef4444}
+.btn-primary{flex:1;background:linear-gradient(135deg,#1d4ed8,#1e40af);border:none;border-radius:10px;
+  padding:13px;color:#f0f9ff;font-size:15px;font-family:Georgia,serif;font-weight:600;transition:opacity .2s}
+.btn-primary:disabled{opacity:.4}
+.btn-secondary{background:#1e293b;border:1px solid #334155;border-radius:10px;
+  padding:13px 16px;color:#94a3b8;font-size:14px;font-family:Georgia,serif}
+.btn-row{display:flex;gap:10px}
+.saved-banner{margin-top:14px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);
+  border-radius:10px;padding:10px;color:#10b981;font-size:13px;text-align:center;display:none}
+.hint{margin-top:18px;padding:11px;background:rgba(30,41,59,.6);border-radius:10px;font-size:11px;color:#475569}
+
+/* Verlauf */
+.section-title{font-size:13px;font-weight:600;letter-spacing:.05em;margin-bottom:10px}
+.list-card{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:12px;overflow:hidden;margin-bottom:24px}
+.list-row{display:flex;align-items:center;padding:11px 14px;gap:10px;border-bottom:1px solid #1e293b}
+.list-row:last-child{border-bottom:none}
+.list-row:nth-child(even){background:rgba(255,255,255,.016)}
+.list-row-info{flex:1;min-width:0}
+.list-date{font-size:12px;color:#94a3b8}
+.list-value{font-size:22px;font-weight:700;line-height:1.2}
+.badge{display:inline-block;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;white-space:nowrap}
+.btn-edit{background:transparent;border:1px solid #334155;border-radius:7px;padding:5px 10px;color:#64748b;font-size:14px}
+.btn-del{background:transparent;border:1px solid rgba(239,68,68,.18);border-radius:7px;padding:5px 10px;color:#ef4444;font-size:14px}
+
+/* Status indicator on entry */
+#inr-status-hint{margin-top:6px;font-size:12px;display:none}
+
+/* Last dose */
+#last-dose-box{background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.18);
+  border-radius:12px;padding:12px 16px;display:none;align-items:center;gap:12px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="logo-circle">🩺</div>
+      <div>
+        <div style="font-size:20px;font-weight:700;color:#f0f9ff;line-height:1.2">INR Tracker</div>
+        <div style="font-size:11px;color:#7dd3fc;letter-spacing:.04em">Marcoumar-Therapie</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="btn-settings" style="background:rgba(30,41,59,.5);border:1px solid #334155;border-radius:9px;padding:7px 12px;color:#94a3b8;font-size:12px">⚙️</button>
+      <div id="last-inr-box">
+        <div style="font-size:10px;color:#94a3b8">Letzter INR</div>
+        <div id="last-inr-val" style="font-size:22px;font-weight:700;line-height:1"></div>
+        <div id="last-inr-icon" style="font-size:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="settings-panel">
+    <div style="font-size:12px;color:#7dd3fc;font-weight:600;letter-spacing:.05em">⚙️ INR-ZIELBEREICH ANPASSEN</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:#64748b">Min</span>
+        <input id="s-min" type="number" step="0.1" class="inp" style="width:70px;padding:7px 10px;font-size:14px"/>
+        <span style="font-size:12px;color:#64748b">Max</span>
+        <input id="s-max" type="number" step="0.1" class="inp" style="width:70px;padding:7px 10px;font-size:14px"/>
+      </div>
+      <button id="btn-save-settings" class="btn-primary" style="flex:none;padding:8px 16px;font-size:13px">Speichern</button>
+      <button id="btn-close-settings" style="background:transparent;border:none;color:#475569;font-size:20px;padding:4px 8px">✕</button>
+    </div>
+    <div class="settings-zones" id="settings-zones"></div>
+  </div>
+
+  <!-- TABS -->
+  <div id="tabs">
+    <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="eingabe">✏️ Eintrag</button>
+    <button class="tab-btn" data-tab="verlauf">📋 Verlauf</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="kpi-grid">
+      <div class="kpi-card" style="background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(59,130,246,.03));border:1px solid rgba(59,130,246,.18)">
+        <div class="kpi-icon">🩸</div><div class="kpi-label">INR-Messungen</div>
+        <div class="kpi-value" style="color:#3b82f6" id="kpi-count">0</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,rgba(139,92,246,.08),rgba(139,92,246,.03));border:1px solid rgba(139,92,246,.18)">
+        <div class="kpi-icon">📈</div><div class="kpi-label">Ø INR-Wert</div>
+        <div class="kpi-value" style="color:#8b5cf6" id="kpi-avg-inr">–</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,rgba(6,182,212,.08),rgba(6,182,212,.03));border:1px solid rgba(6,182,212,.18)">
+        <div class="kpi-icon">💊</div><div class="kpi-label">Ø Tagesdosis</div>
+        <div class="kpi-value" style="color:#06b6d4" id="kpi-avg-dose">–</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(16,185,129,.03));border:1px solid rgba(16,185,129,.18)">
+        <div class="kpi-icon">🎯</div><div class="kpi-label">Im Zielbereich</div>
+        <div class="kpi-value" style="color:#10b981" id="kpi-pct">–</div>
+      </div>
+    </div>
+    <div id="no-data" class="empty-card">
+      <div style="font-size:40px;margin-bottom:12px">📈</div>
+      <p style="font-size:14px">Noch keine Einträge.</p>
+      <p style="font-size:12px;margin-top:6px;color:#334155">Tippe auf «Eintrag» um zu beginnen.</p>
+    </div>
+    <div id="chart-section" style="display:none">
+      <div class="chart-box">
+        <div class="chart-title">
+          <span style="font-size:13px;color:#7dd3fc;font-weight:600">INR &amp; DOSIS</span>
+          <span id="chart-range-label" style="font-size:10px;color:#475569"></span>
+        </div>
+        <canvas id="mainChart" height="240"></canvas>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#ea580c;border-radius:50%"></div>INR (₿)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>Dosis (mg)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(16,185,129,.4)"></div>Zielbereich</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(249,115,22,.4)"></div>Gefahrenzone</div>
+          <div class="legend-item"><div class="legend-dot" style="background:rgba(239,68,68,.3)"></div>Ausserhalb</div>
+        </div>
+      </div>
+      <div id="last-dose-box">
+        <div style="font-size:26px">💊</div>
+        <div>
+          <div style="font-size:10px;color:#64748b;letter-spacing:.06em">LETZTE DOSIS</div>
+          <div id="last-dose-val" style="font-size:20px;font-weight:700;color:#06b6d4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EINGABE -->
+  <div id="tab-eingabe" class="tab-content">
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="dose">💊 Tägliche Dosis</button>
+      <button class="mode-btn" data-mode="inr">🩸 INR-Messung</button>
+    </div>
+    <div class="form-card">
+      <!-- DOSE FORM -->
+      <div id="form-dose">
+        <h2 id="dose-form-title" style="margin:0 0 18px;font-size:16px;color:#7dd3fc">💊 Marcoumar-Dosis eintragen</h2>
+        <label class="field">
+          <span class="field-label">Datum</span>
+          <input id="dose-date" type="text" class="inp" placeholder="TT.MM.JJJJ" inputmode="numeric"/>
+        </label>
+        <label class="field" style="margin-bottom:22px">
+          <span class="field-label">Tagesdosis (mg)</span>
+          <input id="dose-val" type="number" step="0.5" min="0" class="inp" placeholder="z.B. 3.0" inputmode="decimal"/>
+        </label>
+        <div class="btn-row">
+          <button id="btn-save-dose" class="btn-primary">Dosis speichern</button>
+          <button id="btn-cancel-dose" class="btn-secondary hidden">Abbrechen</button>
+        </div>
+        <div id="dose-saved" class="saved-banner">✓ Gespeichert</div>
+      </div>
+      <!-- INR FORM -->
+      <div id="form-inr" class="hidden">
+        <h2 id="inr-form-title" style="margin:0 0 18px;font-size:16px;color:#7dd3fc">🩸 INR-Messung eintragen</h2>
+        <label class="field">
+          <span class="field-label">Datum der Messung</span>
+          <input id="inr-date" type="text" class="inp" placeholder="TT.MM.JJJJ" inputmode="numeric"/>
+        </label>
+        <label class="field" style="margin-bottom:22px">
+          <span id="inr-val-label" class="field-label">INR-Wert</span>
+          <input id="inr-val" type="number" step="0.1" min="0.5" max="10" class="inp" placeholder="z.B. 2.5" inputmode="decimal"/>
+          <div id="inr-status-hint"></div>
+        </label>
+        <div class="btn-row">
+          <button id="btn-save-inr" class="btn-primary">INR speichern</button>
+          <button id="btn-cancel-inr" class="btn-secondary hidden">Abbrechen</button>
+        </div>
+        <div id="inr-saved" class="saved-banner">✓ Gespeichert</div>
+      </div>
+      <div class="hint"><strong style="color:#64748b">Hinweis:</strong> Ersetzt keine ärztliche Beratung. Dosisänderungen stets mit dem Arzt besprechen.</div>
+    </div>
+  </div>
+
+  <!-- VERLAUF -->
+  <div id="tab-verlauf" class="tab-content">
+    <div class="section-title" style="color:#7dd3fc">🩸 INR-MESSUNGEN</div>
+    <div id="inr-list"><div class="empty-card">Noch keine INR-Messungen</div></div>
+    <div class="section-title" style="color:#06b6d4;margin-top:8px">💊 TAGESDOSEN</div>
+    <div id="dose-list"><div class="empty-card">Noch keine Dosiseinträge</div></div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+// ── Storage ───────────────────────────────────────────────────────
+const KEY_INR='inr-v2', KEY_DOSE='dose-v2', KEY_SET='settings-v2';
+const DANGER=0.5;
+let inrList=[], doseList=[], targetMin=2.5, targetMax=3.5;
+let inrEditId=null, doseEditId=null;
+
+function load(){
+  try{ inrList=JSON.parse(localStorage.getItem(KEY_INR))||[]; }catch(e){inrList=[];}
+  try{ doseList=JSON.parse(localStorage.getItem(KEY_DOSE))||[]; }catch(e){doseList=[];}
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY_SET))||{};
+    if(s.targetMin!=null) targetMin=s.targetMin;
+    if(s.targetMax!=null) targetMax=s.targetMax;
+  }catch(e){}
+}
+function save(){ localStorage.setItem(KEY_INR,JSON.stringify(inrList)); localStorage.setItem(KEY_DOSE,JSON.stringify(doseList)); }
+
+// ── Date helpers ──────────────────────────────────────────────────
+function pad(n){return String(n).padStart(2,'0');}
+function todayIso(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+function isoToDisp(iso){if(!iso)return '';const[y,m,d]=iso.split('-');return `${d}.${m}.${y}`;}
+function dispToIso(s){
+  const p=s.trim().split('.');
+  if(p.length!==3)return null;
+  let[d,m,y]=p;
+  if(y&&y.length===2)y='20'+y;
+  if(!d||!m||!y||y.length!==4)return null;
+  const dd=parseInt(d),mm=parseInt(m),yy=parseInt(y);
+  if(isNaN(dd)||isNaN(mm)||isNaN(yy)||mm<1||mm>12||dd<1||dd>31)return null;
+  return `${y}-${pad(mm)}-${pad(dd)}`;
+}
+function fmtLong(iso){
+  return new Date(iso+'T12:00:00').toLocaleDateString('de-CH',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+}
+function fmtShort(iso){const[y,m,d]=iso.split('-');return `${d}.${m}.${y.slice(2)}`;}
+
+// ── INR Status ────────────────────────────────────────────────────
+function getStatus(inr){
+  const dL=targetMin-DANGER, dH=targetMax+DANGER;
+  if(inr<dL) return {label:'Ausserhalb – Zu tief',   color:'#ef4444', icon:'⛔'};
+  if(inr<targetMin) return {label:'Gefahrenzone – Zu tief', color:'#f97316', icon:'⚠️'};
+  if(inr>dH) return {label:'Ausserhalb – Zu hoch',   color:'#ef4444', icon:'⛔'};
+  if(inr>targetMax) return {label:'Gefahrenzone – Zu hoch', color:'#f97316', icon:'⚠️'};
+  return {label:'Im Zielbereich', color:'#10b981', icon:'✓'};
+}
+
+// ── Date input wiring ─────────────────────────────────────────────
+function wireDateInput(inputEl){
+  inputEl.addEventListener('input',function(){
+    const iso=dispToIso(this.value);
+    this.classList.toggle('invalid',!iso && this.value.length>0);
+    if(iso) this._isoVal=iso;
+  });
+  inputEl.addEventListener('blur',function(){
+    if(this._isoVal) this.value=isoToDisp(this._isoVal);
+    this.classList.remove('invalid');
+  });
+}
+function setDateInput(el, iso){
+  el.value=isoToDisp(iso);
+  el._isoVal=iso;
+  el.classList.remove('invalid');
+}
+function getDateInput(el){
+  const iso=dispToIso(el.value);
+  if(iso){ el._isoVal=iso; return iso; }
+  return el._isoVal||null;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-'+this.dataset.tab).classList.add('active');
+    if(this.dataset.tab==='dashboard') drawChart();
+    if(this.dataset.tab==='verlauf') renderLists();
+  });
+});
+
+// ── Mode toggle ───────────────────────────────────────────────────
+document.querySelectorAll('.mode-btn').forEach(btn=>{
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    this.classList.add('active');
+    const mode=this.dataset.mode;
+    document.getElementById('form-dose').classList.toggle('hidden', mode!=='dose');
+    document.getElementById('form-inr').classList.toggle('hidden',  mode!=='inr');
+  });
+});
+
+// ── Settings ──────────────────────────────────────────────────────
+document.getElementById('btn-settings').addEventListener('click',()=>{
+  const p=document.getElementById('settings-panel');
+  const open=p.style.display==='block';
+  p.style.display=open?'none':'block';
+  if(!open){
+    document.getElementById('s-min').value=targetMin;
+    document.getElementById('s-max').value=targetMax;
+    updateSettingsZones();
+  }
+});
+document.getElementById('btn-close-settings').addEventListener('click',()=>{
+  document.getElementById('settings-panel').style.display='none';
+});
+document.getElementById('btn-save-settings').addEventListener('click',()=>{
+  const mn=parseFloat(document.getElementById('s-min').value);
+  const mx=parseFloat(document.getElementById('s-max').value);
+  if(isNaN(mn)||isNaN(mx)||mn>=mx) return;
+  targetMin=mn; targetMax=mx;
+  localStorage.setItem(KEY_SET,JSON.stringify({targetMin,targetMax}));
+  document.getElementById('settings-panel').style.display='none';
+  renderAll();
+});
+function updateSettingsZones(){
+  document.getElementById('settings-zones').innerHTML=
+    `<span style="color:#10b981;font-size:11px">● Ziel: ${targetMin}–${targetMax}</span>`+
+    `<span style="color:#f97316;font-size:11px">● Gefahr: ${+(targetMin-DANGER).toFixed(1)}–${targetMin} / ${targetMax}–${+(targetMax+DANGER).toFixed(1)}</span>`+
+    `<span style="color:#ef4444;font-size:11px">● Aussen: &lt;${+(targetMin-DANGER).toFixed(1)} / &gt;${+(targetMax+DANGER).toFixed(1)}</span>`;
+}
+
+// ── DOSE form ─────────────────────────────────────────────────────
+const doseDate=document.getElementById('dose-date');
+const doseVal=document.getElementById('dose-val');
+wireDateInput(doseDate);
+setDateInput(doseDate,todayIso());
+
+document.getElementById('btn-save-dose').addEventListener('click',()=>{
+  const d=getDateInput(doseDate);
+  const v=doseVal.value.trim();
+  if(!d||!v) return;
+  const entry={id:doseEditId??Date.now(),date:d,dose:v};
+  if(doseEditId){ doseList=doseList.map(e=>e.id===doseEditId?entry:e); doseEditId=null; }
+  else doseList.push(entry);
+  save();
+  setDateInput(doseDate,todayIso());
+  doseVal.value='';
+  document.getElementById('btn-cancel-dose').classList.add('hidden');
+  document.getElementById('dose-form-title').textContent='💊 Marcoumar-Dosis eintragen';
+  document.getElementById('btn-save-dose').textContent='Dosis speichern';
+  const banner=document.getElementById('dose-saved');
+  banner.style.display='block'; setTimeout(()=>banner.style.display='none',2000);
+  renderAll();
+});
+document.getElementById('btn-cancel-dose').addEventListener('click',()=>{
+  doseEditId=null;
+  setDateInput(doseDate,todayIso());
+  doseVal.value='';
+  document.getElementById('btn-cancel-dose').classList.add('hidden');
+  document.getElementById('dose-form-title').textContent='💊 Marcoumar-Dosis eintragen';
+  document.getElementById('btn-save-dose').textContent='Dosis speichern';
+});
+
+// ── INR form ──────────────────────────────────────────────────────
+const inrDate=document.getElementById('inr-date');
+const inrVal=document.getElementById('inr-val');
+wireDateInput(inrDate);
+setDateInput(inrDate,todayIso());
+
+inrVal.addEventListener('input',function(){
+  const v=parseFloat(this.value);
+  const hint=document.getElementById('inr-status-hint');
+  if(!isNaN(v)&&v>0){
+    const s=getStatus(v);
+    hint.textContent=s.icon+' '+s.label;
+    hint.style.color=s.color;
+    hint.style.display='block';
+  } else hint.style.display='none';
+});
+
+document.getElementById('btn-save-inr').addEventListener('click',()=>{
+  const d=getDateInput(inrDate);
+  const v=inrVal.value.trim();
+  if(!d||!v) return;
+  const entry={id:inrEditId??Date.now(),date:d,inr:v};
+  if(inrEditId){ inrList=inrList.map(e=>e.id===inrEditId?entry:e); inrEditId=null; }
+  else inrList.push(entry);
+  save();
+  setDateInput(inrDate,todayIso());
+  inrVal.value='';
+  document.getElementById('inr-status-hint').style.display='none';
+  document.getElementById('btn-cancel-inr').classList.add('hidden');
+  document.getElementById('inr-form-title').textContent='🩸 INR-Messung eintragen';
+  document.getElementById('btn-save-inr').textContent='INR speichern';
+  const banner=document.getElementById('inr-saved');
+  banner.style.display='block'; setTimeout(()=>banner.style.display='none',2000);
+  renderAll();
+});
+document.getElementById('btn-cancel-inr').addEventListener('click',()=>{
+  inrEditId=null;
+  setDateInput(inrDate,todayIso());
+  inrVal.value='';
+  document.getElementById('inr-status-hint').style.display='none';
+  document.getElementById('btn-cancel-inr').classList.add('hidden');
+  document.getElementById('inr-form-title').textContent='🩸 INR-Messung eintragen';
+  document.getElementById('btn-save-inr').textContent='INR speichern';
+});
+
+// ── Chart ─────────────────────────────────────────────────────────
+function drawChart(){
+  const canvas=document.getElementById('mainChart');
+  if(!canvas) return;
+  // Responsive width
+  const W=canvas.parentElement.clientWidth-32;
+  const H=240;
+  canvas.width=W*window.devicePixelRatio;
+  canvas.height=H*window.devicePixelRatio;
+  canvas.style.width=W+'px';
+  canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
+
+  const sorted_inr=[...inrList].sort((a,b)=>a.date.localeCompare(b.date));
+  const sorted_dose=[...doseList].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted_inr.length&&!sorted_dose.length) return;
+
+  // Build timeline
+  const allDates=[...new Set([...sorted_inr.map(e=>e.date),...sorted_dose.map(e=>e.date)])].sort();
+  const inrMap=Object.fromEntries(sorted_inr.map(e=>[e.date,parseFloat(e.inr)]));
+  const doseMap=Object.fromEntries(sorted_dose.map(e=>[e.date,parseFloat(e.dose)]));
+  const data=[];
+  let cur=new Date(allDates[0]+'T12:00:00');
+  const end=new Date(allDates[allDates.length-1]+'T12:00:00');
+  while(cur<=end){
+    const ds=`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
+    data.push({label:fmtShort(ds),inr:inrMap[ds]??null,dose:doseMap[ds]??null});
+    cur.setDate(cur.getDate()+1);
+  }
+
+  const PAD={top:14,right:36,bottom:28,left:30};
+  const cW=W-PAD.left-PAD.right;
+  const cH=H-PAD.top-PAD.bottom;
+  const N=data.length;
+
+  // Scales
+  const INR_MAX=6, INR_MIN=0;
+  const allDose=data.map(d=>d.dose).filter(v=>v!=null);
+  const DOSE_MAX=allDose.length?Math.max(...allDose)*1.3:6;
+  const DOSE_MIN=0;
+
+  function xOf(i){ return PAD.left + (N<=1?cW/2:i/(N-1)*cW); }
+  function yInr(v){ return PAD.top + cH - (v-INR_MIN)/(INR_MAX-INR_MIN)*cH; }
+  function yDose(v){ return PAD.top + cH - (v-DOSE_MIN)/(DOSE_MAX-DOSE_MIN)*cH; }
+
+  ctx.clearRect(0,0,W,H);
+
+  // ── Zone bands ──
+  function drawBand(y1,y2,color,alpha){
+    ctx.fillStyle=color; ctx.globalAlpha=alpha;
+    ctx.fillRect(PAD.left, yInr(Math.min(y2,INR_MAX)), cW, Math.abs(yInr(y1)-yInr(y2)));
+    ctx.globalAlpha=1;
+  }
+  drawBand(0,          targetMin-DANGER, '#ef4444', 0.09);
+  drawBand(targetMin-DANGER, targetMin,  '#f97316', 0.14);
+  drawBand(targetMin,  targetMax,        '#10b981', 0.09);
+  drawBand(targetMax,  targetMax+DANGER, '#f97316', 0.14);
+  drawBand(targetMax+DANGER, INR_MAX,   '#ef4444', 0.09);
+
+  // ── Grid lines ──
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=1; ctx.globalAlpha=1;
+  for(let v=0;v<=INR_MAX;v+=1){
+    const y=yInr(v); ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke();
+  }
+  // X grid - show subset of labels
+  const step=Math.max(1,Math.round(N/6));
+  for(let i=0;i<N;i+=step){
+    const x=xOf(i); ctx.beginPath(); ctx.moveTo(x,PAD.top); ctx.lineTo(x,PAD.top+cH); ctx.stroke();
+  }
+
+  // ── Danger reference lines ──
+  function dashLine(yVal,color){
+    ctx.strokeStyle=color; ctx.globalAlpha=0.7; ctx.lineWidth=1;
+    ctx.setLineDash([5,4]); ctx.beginPath();
+    ctx.moveTo(PAD.left,yInr(yVal)); ctx.lineTo(PAD.left+cW,yInr(yVal)); ctx.stroke();
+    ctx.setLineDash([]);  ctx.globalAlpha=1;
+  }
+  dashLine(targetMin-DANGER,'#ef4444');
+  dashLine(targetMin,'#f97316');
+  dashLine(targetMax,'#f97316');
+  dashLine(targetMax+DANGER,'#ef4444');
+
+  // ── Dose area ──
+  const dosePoints=data.map((d,i)=>({x:xOf(i),y:d.dose!=null?yDose(d.dose):null}));
+  ctx.globalAlpha=1;
+  // Fill
+  const grad=ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
+  grad.addColorStop(0,'rgba(6,182,212,0.35)'); grad.addColorStop(1,'rgba(6,182,212,0)');
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  let started=false;
+  dosePoints.forEach((p,i)=>{
+    if(p.y==null){started=false;return;}
+    if(!started){ctx.moveTo(p.x,p.y);started=true;}
+    else ctx.lineTo(p.x,p.y);
+  });
+  // close path down
+  let last=null;
+  for(let i=dosePoints.length-1;i>=0;i--){ if(dosePoints[i].y!=null){last=dosePoints[i];break;} }
+  let first=null;
+  for(let i=0;i<dosePoints.length;i++){ if(dosePoints[i].y!=null){first=dosePoints[i];break;} }
+  if(last&&first){ ctx.lineTo(last.x,PAD.top+cH); ctx.lineTo(first.x,PAD.top+cH); ctx.closePath(); ctx.fill(); }
+  // Line
+  ctx.strokeStyle='#06b6d4'; ctx.lineWidth=1.5; ctx.globalAlpha=1; ctx.setLineDash([]);
+  ctx.beginPath(); started=false;
+  dosePoints.forEach(p=>{
+    if(p.y==null){started=false;return;}
+    if(!started){ctx.moveTo(p.x,p.y);started=true;}
+    else ctx.lineTo(p.x,p.y);
+  });
+  ctx.stroke();
+
+  // ── INR line ──
+  const inrPoints=data.map((d,i)=>({x:xOf(i),y:d.inr!=null?yInr(d.inr):null,inr:d.inr}));
+  ctx.strokeStyle='rgba(234,88,12,0.55)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); started=false;
+  inrPoints.forEach(p=>{
+    if(p.y==null){started=false;return;}
+    if(!started){ctx.moveTo(p.x,p.y);started=true;}
+    else ctx.lineTo(p.x,p.y);
+  });
+  ctx.stroke();
+
+  // ── ₿ dots ──
+  inrPoints.forEach(p=>{
+    if(p.y==null) return;
+    ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(p.x,p.y,9,0,Math.PI*2);
+    ctx.fillStyle='#ea580c'; ctx.fill();
+    ctx.strokeStyle='#fdba74'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='bold 9px Arial,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('₿',p.x,p.y);
+  });
+
+  // ── Axes labels ──
+  ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+  for(let v=0;v<=INR_MAX;v+=1){ ctx.fillText(v,2,yInr(v)); }
+  ctx.textAlign='right';
+  if(DOSE_MAX>0){
+    const dStep=DOSE_MAX>4?2:1;
+    for(let v=0;v<=DOSE_MAX;v+=dStep){
+      ctx.fillText(v.toFixed(0),W-2,yDose(v));
+    }
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
+}
+
+// ── Render all UI ─────────────────────────────────────────────────
+function renderAll(){
+  // KPIs
+  const si=[...inrList].sort((a,b)=>a.date.localeCompare(b.date));
+  const sd=[...doseList].sort((a,b)=>a.date.localeCompare(b.date));
+
+  document.getElementById('kpi-count').textContent=si.length;
+  document.getElementById('kpi-avg-inr').textContent=si.length?(si.reduce((s,e)=>s+parseFloat(e.inr),0)/si.length).toFixed(2):'–';
+  document.getElementById('kpi-avg-dose').textContent=sd.length?((sd.reduce((s,e)=>s+parseFloat(e.dose),0)/sd.length).toFixed(1)+' mg'):'–';
+  const inT=si.filter(e=>{const v=parseFloat(e.inr);return v>=targetMin&&v<=targetMax;}).length;
+  document.getElementById('kpi-pct').textContent=si.length?Math.round(inT/si.length*100)+'%':'–';
+
+  const hasData=si.length>0||sd.length>0;
+  document.getElementById('no-data').style.display=hasData?'none':'block';
+  document.getElementById('chart-section').style.display=hasData?'block':'none';
+
+  // Header INR box
+  const box=document.getElementById('last-inr-box');
+  if(si.length){
+    const last=si[si.length-1];
+    const s=getStatus(parseFloat(last.inr));
+    box.style.display='block';
+    box.style.border=`1px solid ${s.color}50`;
+    box.style.background=s.color+'18';
+    document.getElementById('last-inr-val').style.color=s.color;
+    document.getElementById('last-inr-val').textContent=parseFloat(last.inr).toFixed(1);
+    document.getElementById('last-inr-icon').style.color=s.color;
+    document.getElementById('last-inr-icon').textContent=s.icon+' '+(s.label.includes('Ziel')?'OK':s.label.split('–')[0]);
+  } else box.style.display='none';
+
+  // Last dose
+  const ld=document.getElementById('last-dose-box');
+  if(sd.length){
+    const last=sd[sd.length-1];
+    ld.style.display='flex';
+    document.getElementById('last-dose-val').innerHTML=
+      `${parseFloat(last.dose).toFixed(1)} mg <span style="font-size:11px;color:#475569;font-weight:400;margin-left:8px">${fmtLong(last.date)}</span>`;
+  } else ld.style.display='none';
+
+  // Settings zones
+  document.getElementById('chart-range-label').textContent=`Ziel ${targetMin}–${targetMax}`;
+  document.getElementById('inr-val-label').textContent=`INR-Wert (Ziel ${targetMin}–${targetMax})`;
+
+  drawChart();
+}
+
+// ── Render lists ──────────────────────────────────────────────────
+function renderLists(){
+  const si=[...inrList].sort((a,b)=>b.date.localeCompare(a.date));
+  const sd=[...doseList].sort((a,b)=>b.date.localeCompare(a.date));
+
+  // INR list
+  const il=document.getElementById('inr-list');
+  if(!si.length){ il.innerHTML='<div class="empty-card">Noch keine INR-Messungen</div>'; }
+  else {
+    const div=document.createElement('div'); div.className='list-card';
+    si.forEach((r,i)=>{
+      const s=getStatus(parseFloat(r.inr));
+      const row=document.createElement('div'); row.className='list-row';
+      row.innerHTML=`
+        <div class="list-row-info">
+          <div class="list-date">${fmtLong(r.date)}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+            <span class="list-value" style="color:${s.color}">${parseFloat(r.inr).toFixed(1)}</span>
+            <span class="badge" style="background:${s.color}22;color:${s.color}">${s.label}</span>
+          </div>
+        </div>
+        <button class="btn-edit" data-id="${r.id}" data-type="inr">✏️</button>
+        <button class="btn-del" data-id="${r.id}" data-type="inr">🗑</button>`;
+      div.appendChild(row);
+    });
+    il.innerHTML=''; il.appendChild(div);
+  }
+
+  // Dose list
+  const dl=document.getElementById('dose-list');
+  if(!sd.length){ dl.innerHTML='<div class="empty-card">Noch keine Dosiseinträge</div>'; }
+  else {
+    const div=document.createElement('div'); div.className='list-card';
+    sd.forEach((r,i)=>{
+      const row=document.createElement('div'); row.className='list-row';
+      row.innerHTML=`
+        <div class="list-row-info">
+          <div class="list-date">${fmtLong(r.date)}</div>
+          <div class="list-value" style="color:#06b6d4;margin-top:2px">${parseFloat(r.dose).toFixed(1)} mg</div>
+        </div>
+        <button class="btn-edit" data-id="${r.id}" data-type="dose">✏️</button>
+        <button class="btn-del" data-id="${r.id}" data-type="dose">🗑</button>`;
+      div.appendChild(row);
+    });
+    dl.innerHTML=''; dl.appendChild(div);
+  }
+
+  // Edit/delete listeners
+  document.querySelectorAll('.btn-edit').forEach(b=>b.addEventListener('click',function(){
+    const id=parseInt(this.dataset.id);
+    const type=this.dataset.type;
+    if(type==='inr'){
+      const r=inrList.find(e=>e.id===id); if(!r)return;
+      inrEditId=id;
+      setDateInput(document.getElementById('inr-date'),r.date);
+      document.getElementById('inr-val').value=r.inr;
+      document.getElementById('inr-form-title').textContent='✏️ INR-Wert bearbeiten';
+      document.getElementById('btn-save-inr').textContent='Speichern';
+      document.getElementById('btn-cancel-inr').classList.remove('hidden');
+      // switch to eingabe/inr
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      document.querySelector('[data-tab="eingabe"]').classList.add('active');
+      document.getElementById('tab-eingabe').classList.add('active');
+      document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('[data-mode="inr"]').classList.add('active');
+      document.getElementById('form-dose').classList.add('hidden');
+      document.getElementById('form-inr').classList.remove('hidden');
+    } else {
+      const r=doseList.find(e=>e.id===id); if(!r)return;
+      doseEditId=id;
+      setDateInput(document.getElementById('dose-date'),r.date);
+      document.getElementById('dose-val').value=r.dose;
+      document.getElementById('dose-form-title').textContent='✏️ Dosis bearbeiten';
+      document.getElementById('btn-save-dose').textContent='Speichern';
+      document.getElementById('btn-cancel-dose').classList.remove('hidden');
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+      document.querySelector('[data-tab="eingabe"]').classList.add('active');
+      document.getElementById('tab-eingabe').classList.add('active');
+      document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelector('[data-mode="dose"]').classList.add('active');
+      document.getElementById('form-inr').classList.add('hidden');
+      document.getElementById('form-dose').classList.remove('hidden');
+    }
+  }));
+  document.querySelectorAll('.btn-del').forEach(b=>b.addEventListener('click',function(){
+    const id=parseInt(this.dataset.id);
+    if(this.dataset.type==='inr') inrList=inrList.filter(e=>e.id!==id);
+    else doseList=doseList.filter(e=>e.id!==id);
+    save(); renderAll(); renderLists();
+  }));
+}
+
+// ── Redraw on resize ──────────────────────────────────────────────
+window.addEventListener('resize',()=>{ if(document.getElementById('tab-dashboard').classList.contains('active')) drawChart(); });
+
+// ── Boot ──────────────────────────────────────────────────────────
+load();
+renderAll();
+</script>
+</body>
+</html>
