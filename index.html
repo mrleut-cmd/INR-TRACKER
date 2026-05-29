@@ -50,7 +50,21 @@ input[type=number]::-webkit-inner-spin-button{opacity:1}
 /* Chart */
 .chart-box{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:14px;padding:16px;margin-bottom:14px}
 .chart-title{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
-canvas{display:block;width:100%}
+
+/* --- NEU: Scroll Container für das Chart --- */
+.chart-scroll-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; /* Flüssiges Scrollen auf iOS */
+  padding-bottom: 8px; /* Platz für die Scrollbar */
+}
+/* Scrollbar-Design im Chart */
+.chart-scroll-wrapper::-webkit-scrollbar { height: 6px; }
+.chart-scroll-wrapper::-webkit-scrollbar-track { background: rgba(30,64,175,.1); border-radius: 4px; }
+.chart-scroll-wrapper::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+canvas{display:block;}
 .chart-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
 .legend-item{display:flex;align-items:center;gap:5px;font-size:10px;color:#64748b}
 .legend-dot{width:10px;height:10px;border-radius:2px}
@@ -179,7 +193,12 @@ canvas{display:block;width:100%}
           <span style="font-size:13px;color:#7dd3fc;font-weight:600">INR &amp; DOSIS</span>
           <span id="chart-range-label" style="font-size:10px;color:#475569"></span>
         </div>
-        <canvas id="mainChart" height="240"></canvas>
+        
+        <!-- NEU: Die Wrapping-Div für das Scrollen -->
+        <div class="chart-scroll-wrapper" id="chart-wrapper">
+          <canvas id="mainChart" height="240"></canvas>
+        </div>
+
         <div class="chart-legend">
           <div class="legend-item"><div class="legend-dot" style="background:#ea580c;border-radius:50%"></div>INR (₿)</div>
           <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>Dosis (mg)</div>
@@ -457,9 +476,32 @@ document.getElementById('btn-cancel-inr').addEventListener('click',()=>{
 // ── Chart ─────────────────────────────────────────────────────────
 function drawChart(){
   const canvas=document.getElementById('mainChart');
-  if(!canvas) return;
-  // Responsive width
-  const W=canvas.parentElement.clientWidth-32;
+  const wrapper=document.getElementById('chart-wrapper');
+  if(!canvas || !wrapper) return;
+  
+  const sorted_inr=[...inrList].sort((a,b)=>a.date.localeCompare(b.date));
+  const sorted_dose=[...doseList].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!sorted_inr.length&&!sorted_dose.length) return;
+
+  // Zeitlinie aufbauen
+  const allDates=[...new Set([...sorted_inr.map(e=>e.date),...sorted_dose.map(e=>e.date)])].sort();
+  let cur=new Date(allDates[0]+'T12:00:00');
+  const end=new Date(allDates[allDates.length-1]+'T12:00:00');
+  
+  // -- NEU: Dynamische Breite berechnen --
+  // Wir wollen, dass 90 Tage auf die sichtbare Breite (Bildschirm) passen.
+  const visibleW = wrapper.parentElement.clientWidth - 32;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((end - cur) / msPerDay) + 1;
+  const minDaysOnScreen = 90; // 3 Monate Sichtbereich
+  
+  let W = visibleW;
+  // Wenn wir mehr als 90 Tage haben, strecken wir den Canvas
+  if (totalDays > minDaysOnScreen) {
+    const pixelsPerDay = visibleW / minDaysOnScreen;
+    W = totalDays * pixelsPerDay;
+  }
+
   const H=240;
   canvas.width=W*window.devicePixelRatio;
   canvas.height=H*window.devicePixelRatio;
@@ -468,17 +510,12 @@ function drawChart(){
   const ctx=canvas.getContext('2d');
   ctx.scale(window.devicePixelRatio,window.devicePixelRatio);
 
-  const sorted_inr=[...inrList].sort((a,b)=>a.date.localeCompare(b.date));
-  const sorted_dose=[...doseList].sort((a,b)=>a.date.localeCompare(b.date));
-  if(!sorted_inr.length&&!sorted_dose.length) return;
-
-  // Build timeline
-  const allDates=[...new Set([...sorted_inr.map(e=>e.date),...sorted_dose.map(e=>e.date)])].sort();
   const inrMap=Object.fromEntries(sorted_inr.map(e=>[e.date,parseFloat(e.inr)]));
   const doseMap=Object.fromEntries(sorted_dose.map(e=>[e.date,parseFloat(e.dose)]));
   const data=[];
-  let cur=new Date(allDates[0]+'T12:00:00');
-  const end=new Date(allDates[allDates.length-1]+'T12:00:00');
+  
+  // cur wurde oben schon deklariert, hier reset
+  cur=new Date(allDates[0]+'T12:00:00');
   while(cur<=end){
     const ds=`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
     data.push({label:fmtShort(ds),inr:inrMap[ds]??null,dose:doseMap[ds]??null});
@@ -519,8 +556,8 @@ function drawChart(){
   for(let v=0;v<=INR_MAX;v+=1){
     const y=yInr(v); ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(PAD.left+cW,y); ctx.stroke();
   }
-  // X grid - show subset of labels
-  const step=Math.max(1,Math.round(N/6));
+  // X grid - dynamisch anpassen
+  const step=Math.max(1,Math.round(N/(W/50))); // Alle ~50px ein Strich
   for(let i=0;i<N;i+=step){
     const x=xOf(i); ctx.beginPath(); ctx.moveTo(x,PAD.top); ctx.lineTo(x,PAD.top+cH); ctx.stroke();
   }
@@ -551,7 +588,6 @@ function drawChart(){
     if(!started){ctx.moveTo(p.x,p.y);started=true;}
     else ctx.lineTo(p.x,p.y);
   });
-  // close path down
   let last=null;
   for(let i=dosePoints.length-1;i>=0;i--){ if(dosePoints[i].y!=null){last=dosePoints[i];break;} }
   let first=null;
@@ -602,6 +638,11 @@ function drawChart(){
   }
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
+
+  // -- NEU: Automatisch nach rechts scrollen, um die neuesten Daten zu sehen --
+  setTimeout(() => {
+    wrapper.scrollLeft = wrapper.scrollWidth;
+  }, 10);
 }
 
 // ── Render all UI ─────────────────────────────────────────────────
