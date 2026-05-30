@@ -198,8 +198,12 @@ canvas{display:block;}
           <span id="chart-range-label" style="font-size:10px;color:#475569"></span>
         </div>
         
-        <div class="chart-scroll-wrapper" id="chart-wrapper">
-          <canvas id="mainChart" height="240"></canvas>
+        <div style="position: relative;" id="chart-container">
+          <div class="chart-scroll-wrapper" id="chart-wrapper">
+            <canvas id="mainChart" height="240"></canvas>
+          </div>
+          <div id="axis-left" style="position: absolute; left: 0; top: 0; bottom: 8px; width: 30px; background: #0f1f3d; pointer-events: none; z-index: 10; border-right: 1px solid rgba(30,64,175,0.2);"></div>
+          <div id="axis-right" style="position: absolute; right: 0; top: 0; bottom: 8px; width: 36px; background: #0f1f3d; pointer-events: none; z-index: 10; border-left: 1px solid rgba(30,64,175,0.2);"></div>
         </div>
 
         <div class="chart-legend">
@@ -484,7 +488,7 @@ function drawChart(){
   let cur=new Date(allDates[0]+'T12:00:00');
   const end=new Date(allDates[allDates.length-1]+'T12:00:00');
   
-  const visibleW = wrapper.parentElement.clientWidth - 32;
+  const visibleW = wrapper.parentElement.clientWidth;
   const msPerDay = 24 * 60 * 60 * 1000;
   const totalDays = Math.round((end - cur) / msPerDay) + 1;
   const minDaysOnScreen = 90;
@@ -514,7 +518,6 @@ function drawChart(){
     cur.setDate(cur.getDate()+1);
   }
 
-  // Erhöhtes Top-Padding (von 14 auf 24), um Platz für die neuen Achsen-Titel zu schaffen
   const PAD={top:24,right:36,bottom:28,left:30};
   const cW=W-PAD.left-PAD.right;
   const cH=H-PAD.top-PAD.bottom;
@@ -610,28 +613,29 @@ function drawChart(){
     ctx.fillText('₿',p.x,p.y);
   });
 
-  // ── Achsen Beschriftungen (Zahlen) ──
-  ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
-  for(let v=0;v<=INR_MAX;v+=1){ ctx.fillText(v,2,yInr(v)); }
-  
-  ctx.textAlign='right';
-  if(DOSE_MAX>0){
-    const dStep=DOSE_MAX>4?2:1;
-    for(let v=0;v<=DOSE_MAX;v+=dStep){
-      ctx.fillText(v.toFixed(0),W-2,yDose(v));
-    }
-  }
-  
+  // X-Achse (Daten) auf dem Canvas zeichnen, damit sie mitscrollt
+  ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
 
-  // ── NEU: Achsen Titel (INR und mg) ──
-  ctx.fillStyle='#64748b'; ctx.font='bold 10px Arial,sans-serif';
-  ctx.textAlign='left'; ctx.textBaseline='bottom';
-  ctx.fillText('INR', 2, PAD.top - 6);
+  // ── Y-ACHSEN ALS STICKY OVERLAYS FÜLLEN ──
+  const axisLeft = document.getElementById('axis-left');
+  const axisRight = document.getElementById('axis-right');
   
-  ctx.textAlign='right';
-  ctx.fillText('mg', W-2, PAD.top - 6);
+  let leftHTML = `<div style="position:absolute; top:${PAD.top - 6}px; left:2px; color:#64748b; font-weight:bold; font-size:10px; line-height:1;">INR</div>`;
+  for(let v=0;v<=INR_MAX;v+=1){
+    leftHTML += `<div style="position:absolute; top:${yInr(v)}px; left:2px; transform:translateY(-50%); color:#475569; font-size:9px; line-height:1;">${v}</div>`;
+  }
+  axisLeft.innerHTML = leftHTML;
+
+  let rightHTML = `<div style="position:absolute; top:${PAD.top - 6}px; right:2px; color:#64748b; font-weight:bold; font-size:10px; line-height:1;">mg</div>`;
+  if(DOSE_MAX>0){
+    const dStep=DOSE_MAX>4?2:1;
+    for(let v=0;v<=DOSE_MAX;v+=dStep){
+      rightHTML += `<div style="position:absolute; top:${yDose(v)}px; right:2px; transform:translateY(-50%); color:#475569; font-size:9px; line-height:1;">${v.toFixed(0)}</div>`;
+    }
+  }
+  axisRight.innerHTML = rightHTML;
 
   setTimeout(() => {
     wrapper.scrollLeft = wrapper.scrollWidth;
