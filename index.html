@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="INR Tracker"/>
-<title>INR Tracker</title>
+<meta name="apple-mobile-web-app-title" content="International Normalized Ratio"/>
+<title>International Normalized Ratio</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:#0f172a;font-family:Georgia,serif;color:#e2e8f0;min-height:100dvh;font-size:15px}
@@ -118,12 +118,11 @@ canvas{display:block;}
 <body>
 <div id="app">
 
-  <!-- HEADER -->
   <div id="header">
     <div style="display:flex;align-items:center;gap:10px">
       <div class="logo-circle">🩺</div>
       <div>
-        <div style="font-size:20px;font-weight:700;color:#f0f9ff;line-height:1.2">INR Tracker</div>
+        <div style="font-size:18px;font-weight:700;color:#f0f9ff;line-height:1.2">International Normalized Ratio</div>
         <div style="font-size:11px;color:#7dd3fc;letter-spacing:.04em">Marcoumar-Therapie</div>
       </div>
     </div>
@@ -137,7 +136,6 @@ canvas{display:block;}
     </div>
   </div>
 
-  <!-- SETTINGS -->
   <div id="settings-panel">
     <div style="font-size:12px;color:#7dd3fc;font-weight:600;letter-spacing:.05em">⚙️ INR-ZIELBEREICH ANPASSEN</div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px">
@@ -152,7 +150,6 @@ canvas{display:block;}
     </div>
     <div class="settings-zones" id="settings-zones"></div>
     
-    <!-- NEU: DATENÜBERTRAGUNG (iCLOUD) IM SETTINGS PANEL -->
     <div style="margin-top:16px; border-top:1px solid rgba(30,64,175,.3); padding-top:14px;">
       <div style="font-size:12px;color:#7dd3fc;font-weight:600;letter-spacing:.05em">🔄 DATENABGLEICH (iCLOUD DRIVE)</div>
       <div style="display:flex;gap:10px;margin-top:10px">
@@ -164,14 +161,12 @@ canvas{display:block;}
     </div>
   </div>
 
-  <!-- TABS -->
   <div id="tabs">
     <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
     <button class="tab-btn" data-tab="eingabe">✏️ Eintrag</button>
     <button class="tab-btn" data-tab="verlauf">📋 Verlauf</button>
   </div>
 
-  <!-- DASHBOARD -->
   <div id="tab-dashboard" class="tab-content active">
     <div class="kpi-grid">
       <div class="kpi-card" style="background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(59,130,246,.03));border:1px solid rgba(59,130,246,.18)">
@@ -225,14 +220,12 @@ canvas{display:block;}
     </div>
   </div>
 
-  <!-- EINGABE -->
   <div id="tab-eingabe" class="tab-content">
     <div class="mode-toggle">
       <button class="mode-btn active" data-mode="dose">💊 Tägliche Dosis</button>
       <button class="mode-btn" data-mode="inr">🩸 INR-Messung</button>
     </div>
     <div class="form-card">
-      <!-- DOSE FORM -->
       <div id="form-dose">
         <h2 id="dose-form-title" style="margin:0 0 18px;font-size:16px;color:#7dd3fc">💊 Marcoumar-Dosis eintragen</h2>
         <label class="field">
@@ -249,7 +242,6 @@ canvas{display:block;}
         </div>
         <div id="dose-saved" class="saved-banner">✓ Gespeichert</div>
       </div>
-      <!-- INR FORM -->
       <div id="form-inr" class="hidden">
         <h2 id="inr-form-title" style="margin:0 0 18px;font-size:16px;color:#7dd3fc">🩸 INR-Messung eintragen</h2>
         <label class="field">
@@ -271,7 +263,6 @@ canvas{display:block;}
     </div>
   </div>
 
-  <!-- VERLAUF -->
   <div id="tab-verlauf" class="tab-content">
     <div class="section-title" style="color:#7dd3fc">🩸 INR-MESSUNGEN</div>
     <div id="inr-list"><div class="empty-card">Noch keine INR-Messungen</div></div>
@@ -279,9 +270,7 @@ canvas{display:block;}
     <div id="dose-list"><div class="empty-card">Noch keine Dosiseinträge</div></div>
   </div>
 
-</div><!-- #app -->
-
-<script>
+</div><script>
 // ── Storage ───────────────────────────────────────────────────────
 const KEY_INR='inr-v2', KEY_DOSE='dose-v2', KEY_SET='settings-v2';
 const DANGER=0.5;
@@ -422,7 +411,7 @@ document.getElementById('btn-save-dose').addEventListener('click',()=>{
   doseVal.value='';
   document.getElementById('btn-cancel-dose').classList.add('hidden');
   document.getElementById('dose-form-title').textContent='💊 Marcoumar-Dosis eintragen';
-  document.getElementById('btn-save-dose').textContent='Dosis保存';
+  document.getElementById('btn-save-dose').textContent='Dosis speichern';
   const banner=document.getElementById('dose-saved');
   banner.style.display='block'; setTimeout(()=>banner.style.display='none',2000);
   renderAll();
@@ -525,7 +514,8 @@ function drawChart(){
     cur.setDate(cur.getDate()+1);
   }
 
-  const PAD={top:14,right:36,bottom:28,left:30};
+  // Erhöhtes Top-Padding (von 14 auf 24), um Platz für die neuen Achsen-Titel zu schaffen
+  const PAD={top:24,right:36,bottom:28,left:30};
   const cW=W-PAD.left-PAD.right;
   const cH=H-PAD.top-PAD.bottom;
   const N=data.length;
@@ -620,8 +610,10 @@ function drawChart(){
     ctx.fillText('₿',p.x,p.y);
   });
 
+  // ── Achsen Beschriftungen (Zahlen) ──
   ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
   for(let v=0;v<=INR_MAX;v+=1){ ctx.fillText(v,2,yInr(v)); }
+  
   ctx.textAlign='right';
   if(DOSE_MAX>0){
     const dStep=DOSE_MAX>4?2:1;
@@ -629,8 +621,17 @@ function drawChart(){
       ctx.fillText(v.toFixed(0),W-2,yDose(v));
     }
   }
+  
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
+
+  // ── NEU: Achsen Titel (INR und mg) ──
+  ctx.fillStyle='#64748b'; ctx.font='bold 10px Arial,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillText('INR', 2, PAD.top - 6);
+  
+  ctx.textAlign='right';
+  ctx.fillText('mg', W-2, PAD.top - 6);
 
   setTimeout(() => {
     wrapper.scrollLeft = wrapper.scrollWidth;
@@ -769,7 +770,7 @@ function renderLists(){
   }));
 }
 
-// ── NEU: JavaScript Logik für den iCloud Backup Import/Export ─────
+// ── iCloud Backup Import/Export ─────
 document.getElementById('btn-export-json').addEventListener('click', () => {
   const backupData = {
     inr: inrList,
@@ -806,6 +807,7 @@ inputImportJson.addEventListener('change', function(e) {
       save();
       localStorage.setItem(KEY_SET, JSON.stringify({ targetMin, targetMax }));
       renderAll();
+      renderLists();
       
       const banner = document.getElementById('sync-success-banner');
       banner.style.display = 'block'; setTimeout(() => banner.style.display = 'none', 2000);
