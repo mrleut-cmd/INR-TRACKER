@@ -524,8 +524,16 @@ function drawChart(){
   const N=data.length;
 
   const INR_MAX=6, INR_MIN=0;
+  
+  // ── NEUE LOGIK FÜR DOSIS-SKALA (1.5mg Schritte) ──
   const allDose=data.map(d=>d.dose).filter(v=>v!=null);
-  const DOSE_MAX=allDose.length?Math.max(...allDose)*1.3:6;
+  let DOSE_MAX = 6;
+  if(allDose.length > 0) {
+    const maxEntered = Math.max(...allDose);
+    while(DOSE_MAX < maxEntered) {
+      DOSE_MAX += 1.5;
+    }
+  }
   const DOSE_MIN=0;
 
   function xOf(i){ return PAD.left + (N<=1?cW/2:i/(N-1)*cW); }
@@ -613,7 +621,7 @@ function drawChart(){
     ctx.fillText('₿',p.x,p.y);
   });
 
-  // X-Achse (Daten) auf dem Canvas zeichnen, damit sie mitscrollt
+  // Nur die Datums-Schriftzüge (X-Achse) scrollen mit
   ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
@@ -628,11 +636,13 @@ function drawChart(){
   }
   axisLeft.innerHTML = leftHTML;
 
+  // ── ANGEPASSTE MG-SKALA (1.5mg Schritte mit Komma) ──
   let rightHTML = `<div style="position:absolute; top:${PAD.top - 6}px; right:2px; color:#64748b; font-weight:bold; font-size:10px; line-height:1;">mg</div>`;
   if(DOSE_MAX>0){
-    const dStep=DOSE_MAX>4?2:1;
-    for(let v=0;v<=DOSE_MAX;v+=dStep){
-      rightHTML += `<div style="position:absolute; top:${yDose(v)}px; right:2px; transform:translateY(-50%); color:#475569; font-size:9px; line-height:1;">${v.toFixed(0)}</div>`;
+    for(let v=0;v<=DOSE_MAX;v+=1.5){
+      // Macht aus 1.5 -> 1,5, lässt aber 3 als 3 stehen
+      const labelText = v % 1 === 0 ? v.toString() : v.toFixed(1).replace('.', ',');
+      rightHTML += `<div style="position:absolute; top:${yDose(v)}px; right:2px; transform:translateY(-50%); color:#475569; font-size:9px; line-height:1;">${labelText}</div>`;
     }
   }
   axisRight.innerHTML = rightHTML;
