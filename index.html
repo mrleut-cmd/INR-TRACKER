@@ -94,9 +94,12 @@ canvas{display:block;}
   border-radius:10px;padding:10px;color:#10b981;font-size:13px;text-align:center;display:none}
 .hint{margin-top:18px;padding:11px;background:rgba(30,41,59,.6);border-radius:10px;font-size:11px;color:#475569}
 
-/* Verlauf */
+/* Verlauf (History Grid für iPad und iPhone) */
+.history-grid{display:grid;grid-template-columns:1fr;gap:24px}
+@media(min-width:768px){.history-grid{grid-template-columns:1fr 1fr;gap:20px}}
+
 .section-title{font-size:13px;font-weight:600;letter-spacing:.05em;margin-bottom:10px}
-.list-card{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:12px;overflow:hidden;margin-bottom:24px}
+.list-card{background:#0f1f3d;border:1px solid rgba(30,64,175,.2);border-radius:12px;overflow:hidden}
 .list-row{display:flex;align-items:center;padding:11px 14px;gap:10px;border-bottom:1px solid #1e293b}
 .list-row:last-child{border-bottom:none}
 .list-row:nth-child(even){background:rgba(255,255,255,.016)}
@@ -268,10 +271,16 @@ canvas{display:block;}
   </div>
 
   <div id="tab-verlauf" class="tab-content">
-    <div class="section-title" style="color:#7dd3fc">🩸 INR-MESSUNGEN</div>
-    <div id="inr-list"><div class="empty-card">Noch keine INR-Messungen</div></div>
-    <div class="section-title" style="color:#06b6d4;margin-top:8px">💊 TAGESDOSEN</div>
-    <div id="dose-list"><div class="empty-card">Noch keine Dosiseinträge</div></div>
+    <div class="history-grid">
+      <div>
+        <div class="section-title" style="color:#7dd3fc">🩸 INR-MESSUNGEN</div>
+        <div id="inr-list"><div class="empty-card">Noch keine INR-Messungen</div></div>
+      </div>
+      <div>
+        <div class="section-title" style="color:#06b6d4">💊 TAGESDOSEN</div>
+        <div id="dose-list"><div class="empty-card">Noch keine Dosiseinträge</div></div>
+      </div>
+    </div>
   </div>
 
 </div><script>
@@ -525,7 +534,6 @@ function drawChart(){
 
   const INR_MAX=6, INR_MIN=0;
   
-  // ── NEUE LOGIK FÜR DOSIS-SKALA (1.5mg Schritte) ──
   const allDose=data.map(d=>d.dose).filter(v=>v!=null);
   let DOSE_MAX = 6;
   if(allDose.length > 0) {
@@ -621,7 +629,7 @@ function drawChart(){
     ctx.fillText('₿',p.x,p.y);
   });
 
-  // Nur die Datums-Schriftzüge (X-Achse) scrollen mit
+  // X-Achse (Daten) auf dem Canvas zeichnen, damit sie mitscrollt
   ctx.fillStyle='#475569'; ctx.font='9px Arial,sans-serif';
   ctx.textAlign='center'; ctx.textBaseline='top';
   for(let i=0;i<N;i+=step){ ctx.fillText(data[i].label,xOf(i),PAD.top+cH+4); }
